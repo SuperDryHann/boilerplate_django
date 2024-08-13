@@ -1,6 +1,6 @@
 {
     "name": "Python Dev Container",
-    "dockerFile": "Dockerfile",
+    "dockerFile": "../Dockerfile",
     "context": "..",
     "appPort": [8000],
     "settings": {
