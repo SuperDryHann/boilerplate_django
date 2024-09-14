@@ -6,4 +6,4 @@ from rest_framework.response import Response
 @permission_classes([IsAuthenticated])
 def b2c_auth_test(request):
     print(request.user)
-    return Response({"message": "This is a protected view"})
+    return Response({"message": "Yo! Test succeeded!"})
