@@ -1,9 +1,12 @@
-from base.models import User
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
 
 
+
+
+
+# Azure AD B2C JWT doesn't have id, jti and token_type fields in the payload, but simple_jwt expects them. So, customise.
 class AzureB2CJWTToken(AccessToken):
     def verify(self):
         # Inject 'id' from 'sub' for Azure B2C if missing
@@ -12,20 +15,43 @@ class AzureB2CJWTToken(AccessToken):
             if self.payload['id'] is None:
                 raise TokenError("Token has neither 'id' nor 'sub' field.")
         
-        # Inject 'jti' if it's missing
+        # Inject 'jti' if it's missing (Azure B2C tokens might not have this)
         if 'jti' not in self.payload:
-            self.payload['jti'] = self.payload['id']
+            self.payload['jti'] = self.payload['id']  # Fallback to 'id' or 'sub'
 
-        # Inject 'token_type' if missing
+        # Inject 'token_type' if missing (Azure B2C tokens might not have this)
         if 'token_type' not in self.payload:
-            self.payload['token_type'] = 'access'
+            self.payload['token_type'] = 'access'  # Assume this is an access token
         
+        # Now, continue with the default verification process
         try:
             super().verify()
         except TokenError as e:
             raise TokenError(f"Token verification failed: {str(e)}")
 
 
+
+
+
+
+# User managemetnt is done by Azure AD B2C, so we don't need to create a user model. Instead, we'll create a user-like object for IsAuthenticated check, or other profile retrieval.
+class AzureB2CUser:
+    """
+    Simple user-like object based on token payload.
+    """
+    def __init__(self, payload):
+        self.id = payload.get('id', None)
+        self.email = payload.get('email', None)
+        self.is_authenticated = True  # DRF checks this attribute for is_authenticated
+
+    def __str__(self):
+        return f"AzureB2CUser(id={self.id}, email={self.email})"
+
+
+
+
+
+# Customise JWTAuthentication to use AzureB2CJWTToken and AzureB2CUser classes. 
 class AzureB2CJWTAuthentication(JWTAuthentication):
     def get_validated_token(self, raw_token):
         """
@@ -39,7 +65,7 @@ class AzureB2CJWTAuthentication(JWTAuthentication):
 
     def authenticate(self, request):
         """
-        Authenticate the request using Azure B2C JWT tokens and map to Django User model.
+        Authenticate the request using Azure B2C JWT tokens and return a custom user-like object.
         """
         raw_token = self.get_raw_token(self.get_header(request))
         
@@ -48,27 +74,5 @@ class AzureB2CJWTAuthentication(JWTAuthentication):
         
         validated_token = self.get_validated_token(raw_token)
         
-        # Get the token payload (Azure AD claims)
-        payload = validated_token.payload
-        
-        # Map the claims to a Django User
-        user = self.get_or_create_user_from_token(payload)
-        
+        user = AzureB2CUser(validated_token.payload)
         return (user, validated_token)
-
-    def get_or_create_user_from_token(self, payload):
-        """
-        Get or create a Django User instance from the Azure AD token claims.
-        """
-        emails = payload.get('emails', None)
-        if emails is None:
-            raise AuthenticationFailed("No email claim found in token")
-
-        # You can customize how you want to link the token claims with a User
-        user_uuid = payload.get('sub', None)
-        first_email = emails[0]
-        user, created = User.objects.get_or_create(
-            user_uuid=user_uuid,
-            defaults={'username': first_email}  # Use email as username
-        )
-        return user

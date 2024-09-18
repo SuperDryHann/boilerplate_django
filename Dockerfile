@@ -27,6 +27,6 @@ COPY . /app/
 EXPOSE 8000
 
 # Run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "azureproject.wsgi:application"]
+CMD ["gunicorn", "--bind", "0.0.0.0:7000", "azureproject.wsgi:application"]
 
 
